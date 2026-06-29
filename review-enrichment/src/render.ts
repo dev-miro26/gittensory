@@ -281,6 +281,63 @@ export function renderBrief(
     }
   }
 
+  const commitSignatures = findings.commitSignature ?? [];
+  if (commitSignatures.length) {
+    lines.push(
+      "### Head-commit signature / author provenance (verify before merging)",
+    );
+    for (const item of commitSignatures) {
+      const status = item.verified
+        ? "signature **verified**"
+        : "signature **unverified**";
+      const flags: string[] = [];
+      if (item.authorMismatch)
+        flags.push("commit author and committer logins differ");
+      if (item.newCommitter)
+        flags.push(
+          "author has no verified history in a repo that otherwise carries verified commits",
+        );
+      const who = item.authorLogin
+        ? ` by ${safeCodeSpan(item.authorLogin)}`
+        : "";
+      const detail = flags.length ? ` — ${flags.join("; ")}` : "";
+      lines.push(
+        `- head commit${who}: ${status} (${safeCodeSpan(item.reason)})${detail}`,
+      );
+    }
+  }
+
+  const iacMisconfigs = findings.iacMisconfig ?? [];
+  if (iacMisconfigs.length) {
+    const explain = (
+      kind: (typeof iacMisconfigs)[number]["kind"],
+    ): string => {
+      switch (kind) {
+        case "wildcard-cors-credentials":
+          return "allows wildcard CORS together with credentials; browsers can send authenticated cross-origin requests";
+        case "open-ingress":
+          return "opens ingress to `0.0.0.0/0`; verify the service is not world-accessible";
+        case "public-bucket":
+          return "makes object storage public; verify this bucket is intended for anonymous access";
+        case "insecure-cookie":
+          return "sets `SameSite=None` without `Secure=true`; browsers can send the cookie cross-site over insecure transport";
+        case "tls-verification-disabled":
+          return "disables TLS certificate verification; this permits man-in-the-middle interception";
+        case "prod-debug":
+          return "enables debug mode in production configuration; this can expose internals or sensitive data";
+        case "hardcoded-service-url":
+          return "hardcodes a service URL in config; prefer environment-specific injection or secrets-managed config";
+      }
+    };
+
+    lines.push("### IaC / config misconfigurations (review before merging)");
+    for (const item of iacMisconfigs) {
+      lines.push(
+        `- ${safeCodeSpan(`${item.file}:${item.line}`)} — ${explain(item.kind)}`,
+      );
+    }
+  }
+
   const nativeBuilds = findings.nativeBuild ?? [];
   if (nativeBuilds.length) {
     lines.push(
